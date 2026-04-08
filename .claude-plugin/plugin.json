@@ -1,8 +1,12 @@
 {
   "name": "kavak-databricks",
   "description": "Databricks connector skills for Kavak analysts — install the connector, run queries, and handle errors.",
+  "version": "1.0.0",
   "author": {
     "name": "Kavak EaaS",
     "email": ""
-  }
+  },
+  "homepage": "https://github.com/vis-nath/kavak-databricks-plugin",
+  "repository": "https://github.com/vis-nath/kavak-databricks-plugin",
+  "license": "MIT"
 }

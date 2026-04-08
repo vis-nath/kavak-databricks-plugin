@@ -1,0 +1,23 @@
+{
+  "name": "kavak-databricks-plugin",
+  "owner": {
+    "name": "Kavak EaaS",
+    "email": ""
+  },
+  "metadata": {
+    "description": "Databricks connector plugin for Kavak analysts",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "kavak-databricks",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/vis-nath/kavak-databricks-plugin.git"
+      },
+      "description": "Databricks connector skills for Kavak analysts — install the connector, run queries, and handle errors.",
+      "version": "1.0.0",
+      "strict": true
+    }
+  ]
+}
