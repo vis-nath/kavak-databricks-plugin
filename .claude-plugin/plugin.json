@@ -1,0 +1,8 @@
+{
+  "name": "kavak-databricks",
+  "description": "Databricks connector skills for Kavak analysts — install the connector, run queries, and handle errors.",
+  "author": {
+    "name": "Kavak EaaS",
+    "email": ""
+  }
+}
