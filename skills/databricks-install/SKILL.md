@@ -29,13 +29,11 @@ ls ~/projects/databricks_connector 2>/dev/null && echo "EXISTS" || echo "NEW"
 
 ### Paso 1 de 6 — Clonar el repositorio
 
-> ℹ️ **Para el administrador del bundle:** reemplaza `[REPO_URL]` con la URL SSH del repositorio del conector antes de compartir este skill. Ejemplo: `git@github.com:[usuario]/[repo].git`
-
 ```bash
-git clone [REPO_URL] ~/projects/databricks_connector
+git clone https://github.com/vis-nath/db-connector.git ~/projects/databricks_connector
 ```
 
-Si aparece "Permission denied (publickey)", el usuario necesita configurar SSH con GitHub. Pregunta si necesita ayuda.
+Si aparece un error de red o acceso, verifica que el usuario tenga conexión a internet.
 
 ### Paso 2 de 6 — Instalar dependencias
 
@@ -146,8 +144,8 @@ git log -1 --oneline
 
 ## Solución de problemas de instalación
 
-### "git@github.com: Permission denied"
-El usuario no tiene SSH configurado con GitHub. Guíalo para generar una llave SSH.
+### Error al clonar el repositorio
+Verifica que el usuario tenga conexión a internet y que el repositorio sea accesible.
 
 ### "config.json no encontrado"
 Ejecutar el Paso 3 de instalación.
