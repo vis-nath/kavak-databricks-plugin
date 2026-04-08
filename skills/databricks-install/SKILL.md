@@ -140,6 +140,11 @@ Confirma al usuario mostrando el último commit:
 git log -1 --oneline
 ```
 
+Si el plugin de skills también necesita actualizarse, ejecuta:
+```bash
+bash ~/projects/kavak-databricks-plugin/scripts/deploy-local.sh
+```
+
 ---
 
 ## Solución de problemas de instalación
