@@ -29,8 +29,10 @@ ls ~/projects/databricks_connector 2>/dev/null && echo "EXISTS" || echo "NEW"
 
 ### Paso 1 de 6 — Clonar el repositorio
 
+> ℹ️ **Para el administrador del bundle:** reemplaza `[REPO_URL]` con la URL SSH del repositorio del conector antes de compartir este skill. Ejemplo: `git@github.com:[usuario]/[repo].git`
+
 ```bash
-git clone git@github.com:vis-nath/db-connector.git ~/projects/databricks_connector
+git clone [REPO_URL] ~/projects/databricks_connector
 ```
 
 Si aparece "Permission denied (publickey)", el usuario necesita configurar SSH con GitHub. Pregunta si necesita ayuda.
@@ -47,11 +49,19 @@ Esto puede tomar 2-3 minutos. Es normal ver muchas líneas de descarga.
 
 ### Paso 3 de 6 — Crear archivo de configuración
 
+Pídele al usuario los siguientes dos valores. Puede pedírselos al administrador de Databricks de su equipo:
+
+> "Necesito dos datos para configurar la conexión:
+> 1. **Host URL** — la dirección del workspace de Databricks (algo como `https://dbc-xxxxxxxx.cloud.databricks.com`)
+> 2. **Warehouse ID** — el ID del SQL Warehouse (una cadena de letras y números, algo como `3de9aee76c2f16f1`)"
+
+Una vez que el usuario proporcione los valores, ejecuta el siguiente comando reemplazando `[HOST_URL]` y `[WAREHOUSE_ID]` con los valores que dio:
+
 ```bash
 mkdir -p ~/.databricks_connector && cat > ~/.databricks_connector/config.json << 'EOF'
 {
-  "host": "https://dbc-6f0786a7-8ba5.cloud.databricks.com",
-  "warehouse_id": "3de9aee76c2f16f1"
+  "host": "[HOST_URL]",
+  "warehouse_id": "[WAREHOUSE_ID]"
 }
 EOF
 chmod 600 ~/.databricks_connector/config.json

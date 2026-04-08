@@ -105,7 +105,8 @@ Muestra el error exacto y ofrece corregir la consulta.
 
 ---
 
-## Catálogos disponibles en Kavak
+## Catálogos y tablas
 
-- `prd_refined.*.*` — datos de producción refinados (Salesforce, operaciones, EaaS)
-- Tablas conocidas: `prd_refined.salesforce_latam_refined.event`, `prd_refined.salesforce_latam_refined.vehicle`
+Usa el nombre de tabla exacto que el usuario mencione. Si no lo sabe, sugiere que lo consulte con el administrador de Databricks o con quien le compartió este acceso.
+
+Formato estándar: `catalogo.esquema.tabla` — por ejemplo: `mi_catalogo.mi_esquema.mi_tabla`

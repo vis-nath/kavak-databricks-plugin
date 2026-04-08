@@ -48,10 +48,7 @@ El conector está listo. Usa el skill **`databricks-query`** para ejecutar la co
 
 ---
 
-## Referencia rápida — Valores de configuración de Kavak
+## Referencia rápida
 
-```
-Host:         https://dbc-6f0786a7-8ba5.cloud.databricks.com
-Warehouse ID: 3de9aee76c2f16f1
-Catálogos:    prd_refined.* (producción refinada — Salesforce, operaciones, etc.)
-```
+Los valores de conexión (Host y Warehouse ID) los tiene el administrador de Databricks de tu equipo.
+Se configuran durante la instalación — no se almacenan en este skill.
