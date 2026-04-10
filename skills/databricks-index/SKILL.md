@@ -50,5 +50,5 @@ El conector está listo. Usa el skill **`databricks-query`** para ejecutar la co
 
 ## Referencia rápida
 
-Los valores de conexión (Host y Warehouse ID) los tiene el administrador de Databricks de tu equipo.
-Se configuran durante la instalación — no se almacenan en este skill.
+Los valores de conexión (`host` y `http_path`) se configuran durante la instalación y se guardan en `~/.databricks_connector/config.json`.
+Los tokens OAuth se guardan en `~/.databricks/token-cache.json` y duran 30-90 días — no hace falta login en el uso diario.

@@ -21,13 +21,13 @@ ls ~/projects/databricks_connector 2>/dev/null && echo "EXISTS" || echo "NEW"
 ```
 
 - Si `EXISTS` → ve a la sección **Actualización** más abajo
-- Si `NEW` → sigue los **6 pasos de instalación** en orden
+- Si `NEW` → sigue los **5 pasos de instalación** en orden
 
 ---
 
 ## Instalación completa (primera vez)
 
-### Paso 1 de 6 — Clonar el repositorio
+### Paso 1 de 5 — Clonar el repositorio
 
 ```bash
 git clone https://github.com/vis-nath/db-connector.git ~/projects/databricks_connector
@@ -35,54 +35,66 @@ git clone https://github.com/vis-nath/db-connector.git ~/projects/databricks_con
 
 Si aparece un error de red o acceso, verifica que el usuario tenga conexión a internet.
 
-### Paso 2 de 6 — Instalar dependencias
+### Paso 2 de 5 — Instalar dependencias
 
 ```bash
 cd ~/projects/databricks_connector
 pip install -r requirements.txt --break-system-packages
-playwright install chromium
 ```
 
-Esto puede tomar 2-3 minutos. Es normal ver muchas líneas de descarga.
+Esto puede tomar 1-2 minutos. Es normal ver muchas líneas de descarga.
 
-### Paso 3 de 6 — Crear archivo de configuración
+### Paso 3 de 5 — Crear archivo de configuración
 
 Pídele al usuario los siguientes dos valores. Puede pedírselos al administrador de Databricks de su equipo:
 
 > "Necesito dos datos para configurar la conexión:
-> 1. **Host URL** — la dirección del workspace de Databricks (algo como `https://dbc-xxxxxxxx.cloud.databricks.com`)
-> 2. **Warehouse ID** — el ID del SQL Warehouse (una cadena de letras y números, algo como `3de9aee76c2f16f1`)"
+> 1. **Host** — la dirección del workspace (sin `https://`), algo como `dbc-xxxxxxxx.cloud.databricks.com`
+> 2. **HTTP Path** — la ruta del SQL Warehouse, algo como `/sql/1.0/warehouses/3de9aee76c2f16f1`"
 
-Una vez que el usuario proporcione los valores, ejecuta el siguiente comando reemplazando `[HOST_URL]` y `[WAREHOUSE_ID]` con los valores que dio:
+Una vez que el usuario proporcione los valores, ejecuta el siguiente comando reemplazando `[HOST]` y `[HTTP_PATH]` con los valores que dio:
 
 ```bash
 mkdir -p ~/.databricks_connector && cat > ~/.databricks_connector/config.json << 'EOF'
 {
-  "host": "[HOST_URL]",
-  "warehouse_id": "[WAREHOUSE_ID]"
+  "host": "[HOST]",
+  "http_path": "[HTTP_PATH]"
 }
 EOF
 chmod 600 ~/.databricks_connector/config.json
 echo "Config guardado"
 ```
 
-### Paso 4 de 6 — Iniciar sesión en Databricks
+Verifica que los valores quedaron bien:
+```bash
+cat ~/.databricks_connector/config.json
+```
+
+### Paso 4 de 5 — Iniciar sesión en Databricks
 
 Dile al usuario:
 
-> "Voy a abrir una ventana de Chrome en tu pantalla de Windows.
-> Cuando aparezca, inicia sesión con tu correo de Kavak (@kavak.com) como lo haces normalmente.
-> No tienes que hacer nada más — la sesión se guardará sola cuando el login sea exitoso
-> y el Chrome se cerrará automáticamente."
+> "Voy a ejecutar el setup de autenticación. Se abrirá tu navegador predeterminado.
+> Cuando aparezca, inicia sesión con tu correo @kavak.com usando 'Continuar con Google'.
+> El login es una sola vez — los tokens se guardan automáticamente y duran entre 30 y 90 días."
 
 Luego ejecuta:
 ```bash
 python3 ~/projects/databricks_connector/setup_auth.py
 ```
 
-El script abre Chrome, navega a la página de SQL Warehouses, espera a que el usuario complete el SSO, guarda la sesión y cierra el navegador automáticamente.
+El script abre el navegador, el usuario completa el SSO de Google, y los tokens se guardan en `~/.databricks/token-cache.json`.
 
-### Paso 5 de 6 — Verificar que funciona
+Resultado esperado al final:
+```
+✓ Autenticado como: nombre.apellido@kavak.com
+```
+
+Si el script termina con ese mensaje, continuar al Paso 5.
+
+Si el script falla, ver **Solución de problemas** más abajo.
+
+### Paso 5 de 5 — Verificar que funciona
 
 ```python
 import sys, pathlib
@@ -99,9 +111,11 @@ Resultado esperado:
 0                 1
 ```
 
-Si aparece un error en lugar de ese resultado, usa el skill **`databricks-query`** para manejarlo.
+Si aparece ese resultado, la instalación está completa. Procede con la consulta original usando el skill **`databricks-query`**.
 
-### Paso 6 de 6 — Configurar regla global en CLAUDE.md
+Si aparece un error, usa el skill **`databricks-query`** para manejarlo.
+
+### Paso 6 — Configurar regla global en CLAUDE.md
 
 Verifica si la regla de Databricks ya existe:
 
@@ -116,11 +130,6 @@ Si el resultado es `FALTA`, agrega la siguiente línea dentro de la sección `##
 ```
 
 Si el resultado es `YA_EXISTE`, no hagas nada — la regla ya está activa.
-
-Confirma al usuario:
-> "Listo. Claude ahora sabrá automáticamente que cuando pidas datos, debe preguntarte si están en Databricks antes de hacer cualquier otra cosa."
-
-Procede con la consulta original usando el skill **`databricks-query`**.
 
 ---
 
@@ -140,11 +149,6 @@ Confirma al usuario mostrando el último commit:
 git log -1 --oneline
 ```
 
-Si el plugin de skills también necesita actualizarse, ejecuta:
-```bash
-bash ~/projects/kavak-databricks-plugin/scripts/deploy-local.sh
-```
-
 ---
 
 ## Solución de problemas de instalación
@@ -155,11 +159,22 @@ Verifica que el usuario tenga conexión a internet y que el repositorio sea acce
 ### "config.json no encontrado"
 Ejecutar el Paso 3 de instalación.
 
-### El Chrome no abre / no se ve la ventana
+### "config.json le faltan campos"
+El archivo existe pero le falta `host` o `http_path`. Mostrar el contenido actual:
 ```bash
-echo $DISPLAY
+cat ~/.databricks_connector/config.json
 ```
-Debe devolver algún valor (`:0`, `:1`). Si no devuelve nada, el usuario debe reiniciar WSL desde PowerShell:
-```
-wsl --shutdown
+Corregir los campos que falten y volver a ejecutar `setup_auth.py`.
+
+### El navegador no abre / setup_auth.py cuelga
+Verificar que el usuario esté ejecutando en un entorno con acceso a GUI (no un servidor headless).
+En WSL2, el navegador predeterminado de Windows debe estar configurado. Si el navegador no abre:
+1. Verificar que exista un navegador predeterminado en Windows
+2. Intentar abrir manualmente una URL en el navegador antes de correr el script
+3. Si el error es de `external-browser`, el SDK imprimirá la URL de autorización — copiarla y abrirla manualmente en el navegador
+
+### "Token expired" o `AuthRequiredError` justo después de instalar
+El setup_auth.py no terminó correctamente. Volver a ejecutar:
+```bash
+python3 ~/projects/databricks_connector/setup_auth.py
 ```

@@ -7,7 +7,7 @@ description: >
   Activar cuando:
   - El usuario quiere datos y ~/projects/databricks_connector existe
   - Aparece DatabricksQueryError (error de consulta, permisos, tabla no encontrada)
-  - Aparece AuthRequiredError (posible sesión expirada)
+  - Aparece AuthRequiredError (tokens expirados — ocurre cada 30-90 días)
   - El usuario menciona un error de Databricks de cualquier tipo
 ---
 
@@ -27,16 +27,16 @@ try:
         LIMIT 100
     """)
 except AuthRequiredError:
-    print("ERROR: Sesión expirada — ver instrucciones abajo")
+    print("ERROR: Tokens expirados — ver instrucciones abajo")
 except DatabricksQueryError as e:
     print(f"ERROR: {e}")
 ```
 
-`query()` devuelve un `pandas.DataFrame`. El warehouse arranca automáticamente si estaba apagado (puede tomar 1-2 minutos en la primera consulta del día).
+`query()` devuelve un `pandas.DataFrame`. El warehouse arranca automáticamente si estaba apagado (puede tomar 1-2 minutos en la primera consulta del día). **No se abre ningún navegador** durante las consultas normales — el SDK renueva el access token silenciosamente en background.
 
 ---
 
-## Cuando aparece `AuthRequiredError` — verificar sesión primero
+## Cuando aparece `AuthRequiredError` — verificar tokens primero
 
 **NO le digas al usuario que se autentique de inmediato.** Primero verifica:
 
@@ -46,31 +46,36 @@ python3 ~/projects/databricks_connector/check_session.py
 
 ### Si el resultado es `Session expired` (exit code 1)
 
-La sesión sí expiró. Dile al usuario:
-> "Tu sesión de Databricks expiró (esto es normal, ocurre cada 8-24 horas).
-> Solo necesitas volver a iniciar sesión."
+Los tokens expirados (esto ocurre cada 30-90 días, no es frecuente). Dile al usuario:
+
+> "Tus tokens de Databricks expiraron — es normal, pasa cada 1-3 meses.
+> Solo necesitas volver a iniciar sesión una vez."
 
 Luego:
-> "Voy a abrir una ventana de Chrome en tu pantalla de Windows.
-> Cuando aparezca, inicia sesión con tu correo de Kavak (@kavak.com) como lo haces normalmente.
-> No tienes que hacer nada más — la sesión se guardará sola cuando el login sea exitoso
-> y el Chrome se cerrará automáticamente."
+> "Voy a ejecutar el re-login. Se abrirá tu navegador predeterminado.
+> Inicia sesión con tu correo @kavak.com usando 'Continuar con Google'.
+> Después de hacer login, el browser puede cerrarse solo o puedes cerrarlo tú."
 
 Ejecuta:
 ```bash
 python3 ~/projects/databricks_connector/setup_auth.py
 ```
 
-Volver a intentar la consulta original.
+Resultado esperado:
+```
+✓ Autenticado como: nombre.apellido@kavak.com
+```
+
+Luego volver a intentar la consulta original.
 
 ### Si el resultado es `Session valid` (exit code 0)
 
-La sesión está activa — el error NO es de autenticación. Muestra el error original al usuario:
-> "Tu sesión de Databricks está activa. El problema no es de autenticación.
+Los tokens están activos — el error NO es de autenticación. Muestra el error original al usuario:
+> "Tus tokens de Databricks están activos. El problema no es de autenticación.
 > El error original fue: `[error completo]`
 > ¿Quieres que lo investiguemos juntos?"
 
-No sugieras re-autenticación en este caso.
+No sugieras re-autenticación en este caso. El SDK renueva el access token solo — si `check_session.py` dice `Session valid`, los tokens están en cache y el SDK los usa.
 
 ---
 
@@ -98,6 +103,15 @@ Dile:
 
 Muestra el error exacto y ofrece corregir la consulta.
 
+### "config.json no encontrado" o `RuntimeError` con mensaje de config
+
+El archivo de configuración no existe o le faltan campos. Ejecuta:
+```bash
+cat ~/.databricks_connector/config.json 2>/dev/null || echo "ARCHIVO NO EXISTE"
+```
+
+Si no existe o le faltan campos `host` o `http_path`, usa el skill **`databricks-install`** para reconfigurar.
+
 ### Cualquier otro `DatabricksQueryError`
 
 > "La consulta falló con este error: `[mensaje completo]`
@@ -105,8 +119,20 @@ Muestra el error exacto y ofrece corregir la consulta.
 
 ---
 
+## Ciclo de vida de los tokens
+
+| Token | Duración | Qué hace el SDK |
+|---|---|---|
+| Access token | ~1 hora | Se renueva automáticamente — el usuario nunca lo nota |
+| Refresh token | 30-90 días | Persiste en `~/.databricks/token-cache.json` — no hace falta login |
+| Ambos expirados | Raro | `AuthRequiredError` → usuario corre `setup_auth.py` una vez |
+
+En uso normal, el usuario nunca verá una ventana de login durante las consultas del día.
+
+---
+
 ## Catálogos y tablas
 
 Usa el nombre de tabla exacto que el usuario mencione. Si no lo sabe, sugiere que lo consulte con el administrador de Databricks o con quien le compartió este acceso.
 
-Formato estándar: `catalogo.esquema.tabla` — por ejemplo: `mi_catalogo.mi_esquema.mi_tabla`
+Formato estándar: `catalogo.esquema.tabla` — por ejemplo: `prd_refined.seller_api_global_refined.variant_availability`
