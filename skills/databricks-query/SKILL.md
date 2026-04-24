@@ -7,7 +7,7 @@ description: >
   Activar cuando:
   - El usuario quiere datos y ~/projects/databricks_connector existe
   - Aparece DatabricksQueryError (error de consulta, permisos, tabla no encontrada)
-  - Aparece AuthRequiredError (tokens expirados — ocurre cada 30-90 días)
+  - Aparece AuthRequiredError (API key expirada ~5 días, o tokens OAuth cada 30-90 días)
   - El usuario menciona un error de Databricks de cualquier tipo
 ---
 
@@ -54,15 +54,35 @@ cat ~/.databricks_connector/.env 2>/dev/null || echo "NO_ENV"
 ```
 
 **Si tiene `.env` con `DATABRICKS_TOKEN`:**
-> "Tu API Key de Databricks puede ser inválida o haber expirado.
-> ¿Puedes verificar que el token en `~/.databricks_connector/.env` sea correcto?"
 
-Si necesita actualizarlo, ejecuta reemplazando `[TOKEN]` con el nuevo:
+Las API Keys de Databricks de Kavak duran aproximadamente 5 días. Dile al usuario:
+
+> "Tu API Key de Databricks expiró — duran unos 5 días.
+> ¿Tienes una nueva? Puedes generarla en el portal de Databricks en Settings → Developer → Access Tokens."
+
+Si el usuario proporciona un nuevo token, actualízalo reemplazando `[TOKEN]`:
 ```bash
 cat > ~/.databricks_connector/.env << 'EOF'
 DATABRICKS_TOKEN=[TOKEN]
 EOF
 chmod 600 ~/.databricks_connector/.env
+echo "Token actualizado"
+```
+
+Luego volver a intentar la consulta original.
+
+Si el usuario **no tiene** una nueva API Key todavía, ofrece el fallback OAuth:
+
+> "Sin problema — podemos autenticarte con tu cuenta de Google por ahora mientras consigues el token nuevo."
+
+Elimina el `.env` para que el conector use OAuth:
+```bash
+rm ~/.databricks_connector/.env
+```
+
+Luego ejecuta:
+```bash
+python3 ~/projects/databricks_connector/setup_auth.py
 ```
 
 **Si NO tiene `.env` (usa OAuth):**
@@ -138,11 +158,12 @@ Si no existe o le faltan campos `host` o `http_path`, usa el skill **`databricks
 
 ### API Key (método recomendado)
 
-| Credencial | Duración | Acción |
+| Credencial | Duración típica | Acción cuando expira |
 |---|---|---|
-| `DATABRICKS_TOKEN` en `.env` | Larga (meses/años) | Si expira → actualizar el valor en `~/.databricks_connector/.env` |
+| `DATABRICKS_TOKEN` en `.env` | ~5 días (política Kavak) | Pedir nuevo token al usuario → actualizar `.env` |
 
-No hay renovación automática ni caché — el token se pasa directamente en cada query. Sin navegador, sin SSO.
+No hay renovación automática — el token se pasa directamente en cada query. Sin navegador, sin SSO.
+Si el usuario no tiene un token nuevo disponible, puede eliminar `.env` y usar OAuth temporalmente.
 
 ### OAuth (alternativa)
 

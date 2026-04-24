@@ -95,8 +95,10 @@ echo "Token guardado"
 Ventajas del API Key:
 - No se abre ningún navegador, nunca
 - Funciona en entornos sin GUI (servidores, WSL2 headless)
-- No expira cada 30-90 días como el OAuth
 - Cualquier proyecto puede leer el token desde `~/.databricks_connector/.env`
+
+Nota: En Kavak, las API Keys duran ~5 días por política de seguridad. Cuando expire,
+Claude te pedirá un nuevo token automáticamente antes de sugerir OAuth.
 
 Salta directamente al **Paso 5**.
 
