@@ -32,11 +32,13 @@ except DatabricksQueryError as e:
     print(f"ERROR: {e}")
 ```
 
-`query()` devuelve un `pandas.DataFrame`. El warehouse arranca automáticamente si estaba apagado (puede tomar 1-2 minutos en la primera consulta del día). **No se abre ningún navegador** durante las consultas normales — el SDK renueva el access token silenciosamente en background.
+`query()` devuelve un `pandas.DataFrame`. El warehouse arranca automáticamente si estaba apagado (puede tomar 1-2 minutos en la primera consulta del día).
+
+**Autenticación:** Si `~/.databricks_connector/.env` contiene `DATABRICKS_TOKEN`, se usa API Key — nunca se abre el navegador. Si no hay token configurado, el SDK usa OAuth con tokens cacheados en `~/.databricks/token-cache.json` y renueva el access token silenciosamente en background.
 
 ---
 
-## Cuando aparece `AuthRequiredError` — verificar tokens primero
+## Cuando aparece `AuthRequiredError` — verificar credenciales primero
 
 **NO le digas al usuario que se autentique de inmediato.** Primero verifica:
 
@@ -46,15 +48,28 @@ python3 ~/projects/databricks_connector/check_session.py
 
 ### Si el resultado es `Session expired` (exit code 1)
 
-Los tokens expirados (esto ocurre cada 30-90 días, no es frecuente). Dile al usuario:
+Verifica si el usuario tiene API Key configurada:
+```bash
+cat ~/.databricks_connector/.env 2>/dev/null || echo "NO_ENV"
+```
+
+**Si tiene `.env` con `DATABRICKS_TOKEN`:**
+> "Tu API Key de Databricks puede ser inválida o haber expirado.
+> ¿Puedes verificar que el token en `~/.databricks_connector/.env` sea correcto?"
+
+Si necesita actualizarlo, ejecuta reemplazando `[TOKEN]` con el nuevo:
+```bash
+cat > ~/.databricks_connector/.env << 'EOF'
+DATABRICKS_TOKEN=[TOKEN]
+EOF
+chmod 600 ~/.databricks_connector/.env
+```
+
+**Si NO tiene `.env` (usa OAuth):**
+Los tokens OAuth expiraron (ocurre cada 30-90 días). Dile al usuario:
 
 > "Tus tokens de Databricks expiraron — es normal, pasa cada 1-3 meses.
 > Solo necesitas volver a iniciar sesión una vez."
-
-Luego:
-> "Voy a ejecutar el re-login. Se abrirá tu navegador predeterminado.
-> Inicia sesión con tu correo @kavak.com usando 'Continuar con Google'.
-> Después de hacer login, el browser puede cerrarse solo o puedes cerrarlo tú."
 
 Ejecuta:
 ```bash
@@ -70,12 +85,12 @@ Luego volver a intentar la consulta original.
 
 ### Si el resultado es `Session valid` (exit code 0)
 
-Los tokens están activos — el error NO es de autenticación. Muestra el error original al usuario:
-> "Tus tokens de Databricks están activos. El problema no es de autenticación.
+Las credenciales están activas — el error NO es de autenticación. Muestra el error original al usuario:
+> "Tus credenciales de Databricks están activas. El problema no es de autenticación.
 > El error original fue: `[error completo]`
 > ¿Quieres que lo investiguemos juntos?"
 
-No sugieras re-autenticación en este caso. El SDK renueva el access token solo — si `check_session.py` dice `Session valid`, los tokens están en cache y el SDK los usa.
+No sugieras re-autenticación en este caso.
 
 ---
 
@@ -119,7 +134,17 @@ Si no existe o le faltan campos `host` o `http_path`, usa el skill **`databricks
 
 ---
 
-## Ciclo de vida de los tokens
+## Ciclo de vida de las credenciales
+
+### API Key (método recomendado)
+
+| Credencial | Duración | Acción |
+|---|---|---|
+| `DATABRICKS_TOKEN` en `.env` | Larga (meses/años) | Si expira → actualizar el valor en `~/.databricks_connector/.env` |
+
+No hay renovación automática ni caché — el token se pasa directamente en cada query. Sin navegador, sin SSO.
+
+### OAuth (alternativa)
 
 | Token | Duración | Qué hace el SDK |
 |---|---|---|
@@ -127,7 +152,7 @@ Si no existe o le faltan campos `host` o `http_path`, usa el skill **`databricks
 | Refresh token | 30-90 días | Persiste en `~/.databricks/token-cache.json` — no hace falta login |
 | Ambos expirados | Raro | `AuthRequiredError` → usuario corre `setup_auth.py` una vez |
 
-En uso normal, el usuario nunca verá una ventana de login durante las consultas del día.
+En uso normal con OAuth, el usuario nunca verá una ventana de login durante las consultas del día.
 
 ---
 

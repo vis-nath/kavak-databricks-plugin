@@ -70,7 +70,37 @@ Verifica que los valores quedaron bien:
 cat ~/.databricks_connector/config.json
 ```
 
-### Paso 4 de 5 — Iniciar sesión en Databricks
+### Paso 4 de 5 — Configurar autenticación (API Key — recomendado)
+
+Pregúntale al usuario:
+
+> "¿Tienes una API Key de Databricks? (un token que empieza con `dapi...`)"
+
+#### Si el usuario dice SÍ — guardar el token (método recomendado)
+
+Pídele el token:
+
+> "Pégame el token y lo guardo de forma segura."
+
+Una vez que te lo dé, guárdalo en `~/.databricks_connector/.env` reemplazando `[TOKEN]` con el valor exacto:
+
+```bash
+cat > ~/.databricks_connector/.env << 'EOF'
+DATABRICKS_TOKEN=[TOKEN]
+EOF
+chmod 600 ~/.databricks_connector/.env
+echo "Token guardado"
+```
+
+Ventajas del API Key:
+- No se abre ningún navegador, nunca
+- Funciona en entornos sin GUI (servidores, WSL2 headless)
+- No expira cada 30-90 días como el OAuth
+- Cualquier proyecto puede leer el token desde `~/.databricks_connector/.env`
+
+Salta directamente al **Paso 5**.
+
+#### Si el usuario dice NO — usar autenticación OAuth (alternativa)
 
 Dile al usuario:
 
@@ -151,6 +181,23 @@ git log -1 --oneline
 
 ---
 
+## Usar el token en otros proyectos
+
+Si el usuario quiere acceder a Databricks desde un proyecto propio sin usar el conector,
+puede cargar las credenciales así:
+
+```python
+from dotenv import load_dotenv
+from pathlib import Path
+import os
+
+load_dotenv(Path.home() / ".databricks_connector" / ".env")
+
+token = os.environ["DATABRICKS_TOKEN"]
+```
+
+---
+
 ## Solución de problemas de instalación
 
 ### Error al clonar el repositorio
@@ -164,17 +211,28 @@ El archivo existe pero le falta `host` o `http_path`. Mostrar el contenido actua
 ```bash
 cat ~/.databricks_connector/config.json
 ```
-Corregir los campos que falten y volver a ejecutar `setup_auth.py`.
+Corregir los campos que falten.
 
-### El navegador no abre / setup_auth.py cuelga
+### El navegador no abre / setup_auth.py cuelga (solo OAuth)
 Verificar que el usuario esté ejecutando en un entorno con acceso a GUI (no un servidor headless).
 En WSL2, el navegador predeterminado de Windows debe estar configurado. Si el navegador no abre:
 1. Verificar que exista un navegador predeterminado en Windows
 2. Intentar abrir manualmente una URL en el navegador antes de correr el script
 3. Si el error es de `external-browser`, el SDK imprimirá la URL de autorización — copiarla y abrirla manualmente en el navegador
 
-### "Token expired" o `AuthRequiredError` justo después de instalar
+Si el usuario tiene una API Key, recomendarle usarla en vez de OAuth para evitar este problema.
+
+### "Token expired" o `AuthRequiredError` justo después de instalar (solo OAuth)
 El setup_auth.py no terminó correctamente. Volver a ejecutar:
 ```bash
 python3 ~/projects/databricks_connector/setup_auth.py
 ```
+
+### `AuthRequiredError` con API Key configurada
+El token en `~/.databricks_connector/.env` puede ser incorrecto o haber expirado.
+Verifica que el archivo tenga el formato correcto:
+```bash
+cat ~/.databricks_connector/.env
+```
+El contenido debe ser exactamente: `DATABRICKS_TOKEN=dapi...`
+Si el token expiró, pídele al usuario uno nuevo y actualiza el archivo.
