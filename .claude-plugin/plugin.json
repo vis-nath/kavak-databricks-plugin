@@ -1,7 +1,7 @@
 {
   "name": "kavak-databricks",
-  "description": "Databricks connector skills for Kavak analysts — install the connector, run queries, and handle errors.",
-  "version": "1.0.0",
+  "description": "Kavak data connector skills — Databricks (API key or OAuth) + Redshift fallback, token rotation, and analyst subagent.",
+  "version": "2.0.0",
   "author": {
     "name": "Kavak EaaS",
     "email": ""
