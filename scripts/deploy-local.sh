@@ -29,16 +29,14 @@ for skill in "${SKILLS[@]}"; do
     echo "  Copied skill: $skill"
 done
 
-# 3. Copy knowledge files (if any)
-mkdir -p "$INSTALL_PATH/knowledge"
-knowledge_count=0
-for f in "$BUNDLE_DIR/knowledge"/*.md; do
-    [ -f "$f" ] && cp "$f" "$INSTALL_PATH/knowledge/" && knowledge_count=$((knowledge_count + 1))
-done
-if [ "$knowledge_count" -gt 0 ]; then
-    echo "  Copied $knowledge_count knowledge file(s)."
+# 3. Copy knowledge tree (subdirectories included)
+if [ -d "$BUNDLE_DIR/knowledge" ]; then
+    cp -r "$BUNDLE_DIR/knowledge/." "$INSTALL_PATH/knowledge/"
+    knowledge_count=$(find "$INSTALL_PATH/knowledge" -name "SKILL.md" | wc -l)
+    echo "  Copied knowledge tree ($knowledge_count domain SKILL.md files)."
 else
-    echo "  No knowledge files yet — add .md files to knowledge/ and re-deploy."
+    mkdir -p "$INSTALL_PATH/knowledge"
+    echo "  No knowledge/ directory found — skipping."
 fi
 
 # 4. Register in installed_plugins.json and enable in settings.json
