@@ -44,6 +44,7 @@ Si falla: el token puede tener espacios extra o estar incompleto (debe empezar c
 
 ## Cambiar a OAuth (el usuario ya no tiene acceso a token)
 
+Paso 1 — Cambiar el método de auth a oauth:
 ```python
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path.home() / 'projects/kavak_connector'))
@@ -52,10 +53,18 @@ set_auth_method('oauth')
 print("Método cambiado a oauth.")
 ```
 
-Luego pide al usuario hacer login con su cuenta `@kavak.com`:
-```bash
-cd ~/projects/kavak_connector && python3 setup_auth.py
+Paso 2 — Ejecutar una query de prueba directamente (esto abre el navegador automáticamente):
+```python
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path.home() / 'projects/kavak_connector'))
+from kavak_connector.databricks.query import query
+df = query("SELECT 1 AS ok")
+print("Autenticado. Resultado:", df.iloc[0, 0])
 ```
+
+El navegador se abre solo al ejecutar el Paso 2. El usuario solo necesita iniciar sesión con su cuenta `@kavak.com` en el navegador — no hay ningún comando manual que ejecutar.
+
+Si el proceso tarda más de 60 segundos, aumentar el timeout del Bash tool a 120000ms.
 
 ---
 
