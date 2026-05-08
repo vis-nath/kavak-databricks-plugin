@@ -142,7 +142,14 @@ from kavak_connector.databricks.auth import get_auth_method
 print(get_auth_method())
 ```
 - `token` → skill **`kavak-token-update`**
-- `oauth` → pide ejecutar: `cd ~/projects/kavak_connector && python3 setup_auth.py`
+- `oauth` → ejecutar directamente una query de prueba; el browser se abre automáticamente para re-autenticar:
+```python
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path.home() / 'projects/kavak_connector'))
+from kavak_connector import query_databricks
+df = query_databricks('SELECT 1 AS ok')
+print('Re-autenticado. OK:', df.iloc[0, 0])
+```
 
 ### `AUTH_ERROR_REDSHIFT`
 

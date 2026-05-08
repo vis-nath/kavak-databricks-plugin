@@ -134,12 +134,19 @@ p.write_text(json.dumps(config, indent=2))
 os.chmod(p, 0o600)
 print('databricks.json creado (oauth)')
 "
-cd ~/projects/kavak_connector && python3 setup_auth.py
 ```
 
-El browser abre una vez con cuenta `@kavak.com`. Los tokens se guardan automáticamente en `~/.databricks/token-cache.json`.
+Luego ejecutar directamente la query de verificación — el conector abre el browser automáticamente al primer intento de conexión:
 
-Verificar: mismo bloque que Método A.
+```python
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path.home() / 'projects/kavak_connector'))
+from kavak_connector import query_databricks
+df = query_databricks('SELECT 1 AS ok')
+print('Databricks OK:', df.iloc[0, 0])
+```
+
+El browser se abre solo. El usuario inicia sesión con su cuenta `@kavak.com` (Google SSO). No hay comandos manuales que ejecutar.
 
 ---
 
@@ -147,28 +154,25 @@ Verificar: mismo bloque que Método A.
 
 Si el usuario quiere cambiar entre token y OAuth en cualquier momento:
 
-```bash
-# De token → oauth:
-python3 -c "
+**De token → OAuth:**
+```python
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path.home() / 'projects/kavak_connector'))
 from kavak_connector.databricks.auth import set_auth_method
 set_auth_method('oauth')
 print('auth_method actualizado a oauth')
-"
-# Luego ejecutar setup_auth.py para hacer login OAuth:
-# cd ~/projects/kavak_connector && python3 setup_auth.py
+```
+Luego ejecutar cualquier query — el browser se abre automáticamente para hacer login.
 
-# De oauth → token:
-python3 -c "
+**De OAuth → token:**
+```python
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path.home() / 'projects/kavak_connector'))
 from kavak_connector.databricks.auth import set_auth_method
 set_auth_method('token')
 print('auth_method actualizado a token')
-"
-# Luego usar kavak-token-update para guardar el nuevo token
 ```
+Luego usar el skill `kavak-token-update` para guardar el nuevo token.
 
 ---
 
