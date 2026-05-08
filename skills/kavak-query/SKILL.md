@@ -1,40 +1,43 @@
 ---
 name: kavak-query
 description: >
-  Ejecutar queries contra Databricks (siempre primero) o Redshift (solo fallback de migración).
-  También maneja joins entre las dos fuentes vía Python.
+  Ejecutar queries SQL contra Databricks o Redshift para datos de Kavak/Kuna.
+  Detecta automáticamente la fuente por sintaxis de tabla. Diseñado para uso
+  tanto interactivo (usuario) como agéntico (analyst-agent u otros subagentes).
   Triggers: query SQL, errores de Databricks/Redshift, solicitud de datos de cualquier tabla.
 ---
 
 # kavak-query
 
-## Índice de Decisión
+## Índice de Decisión (leer siempre primero)
 
-| Situación | Acción |
+**Paso 1: ¿La fuente viene indicada por el agente que te llama?**
+- SÍ (el agente especificó `SOURCE: databricks` o `SOURCE: redshift`) → ir directamente a esa sección
+- NO (llamada interactiva del usuario) → Paso 2
+
+**Paso 2: Detectar fuente por sintaxis de tabla en el SQL**
+
+| Patrón detectado en el SQL | Fuente |
 |---|---|
-| Tabla en formato `catalog.schema.table` | → Query Databricks |
-| Tabla de Redshift o dato en migración | → Intentar Databricks primero, luego Redshift |
-| Datos de dos tablas de fuentes distintas | → Cross-source join (sección abajo) |
-| Error `AUTH_ERROR_DATABRICKS` | → Sección errores auth Databricks |
-| Error `AUTH_ERROR_REDSHIFT` | → Sección errores auth Redshift |
-| Error `QUERY_ERROR` | → Sección errores SQL |
-| Error `CONFIG_ERROR` | → skill `kavak-install` |
+| Tabla con formato `palabra.palabra.palabra` (3 partes) | → Databricks |
+| Tabla con formato `palabra.palabra` (2 partes) | → Redshift |
+| No hay referencia a tabla con punto (ej. `SELECT 1`, tabla simple sin punto) | → Preguntar al usuario |
+
+**Regla clave:** No conviertas ni adaptes la sintaxis. Si el SQL tiene sintaxis de Redshift, ejecútalo en Redshift tal cual. Si tiene sintaxis de Databricks, ejecútalo en Databricks tal cual.
 
 ---
 
-## Contexto de Migración (IMPORTANTE)
+## Contexto de Datos (Kavak y Kuna)
 
-Kavak está migrando datos de Redshift → Databricks. **Siempre intenta Databricks primero.**
-Usa Redshift solo si:
-1. La tabla no existe en Databricks (error `TABLE_NOT_FOUND`)
-2. El usuario confirma que el dato aún no fue migrado
+Kavak y Kuna comparten la misma infraestructura de datos. Ambas marcas tienen datos en Databricks (catálogo `prd_refined` principalmente) y en Redshift (datos en migración).
 
-Cuando uses Redshift, avisa:
-> ⚠️ Este dato aún no está en Databricks. Consultando Redshift como fuente temporal.
+**Estado de migración:** Redshift → Databricks en curso. Redshift se usa solo para datos que aún no migraron. No intentes ejecutar en Databricks un query con sintaxis de Redshift ni viceversa.
 
 ---
 
-## Query a Databricks (patrón estándar)
+## Ejecución en Databricks
+
+Usa cuando el SQL contiene tablas con formato `catalog.schema.tabla` (3 partes) o cuando `SOURCE: databricks`.
 
 ```python
 import sys, pathlib
@@ -43,7 +46,7 @@ from kavak_connector import query_databricks, QueryError, AuthRequiredError, Con
 
 try:
     df = query_databricks("""
-        SELECT * FROM prd_refined.schema.tabla LIMIT 1000
+        PEGAR_QUERY_AQUI
     """)
     print(df.to_string())
 except AuthRequiredError:
@@ -56,7 +59,9 @@ except ConfigNotFoundError as e:
 
 ---
 
-## Query a Redshift (solo fallback)
+## Ejecución en Redshift
+
+Usa cuando el SQL contiene tablas con formato `schema.tabla` (2 partes) o cuando `SOURCE: redshift`.
 
 ```python
 import sys, pathlib
@@ -65,7 +70,7 @@ from kavak_connector import query_redshift, QueryError, AuthRequiredError, Confi
 
 try:
     df = query_redshift("""
-        SELECT * FROM schema.tabla LIMIT 1000
+        PEGAR_QUERY_AQUI
     """)
     print(df.to_string())
 except AuthRequiredError:
@@ -80,32 +85,49 @@ except ConfigNotFoundError as e:
 
 ## Cross-source Join (Databricks + Redshift vía Python)
 
-Cuando una tabla está en Databricks y la otra aún en Redshift:
+Usa cuando necesitas combinar una tabla de Databricks (3 partes) con una de Redshift (2 partes).
+El agente que llama a este skill puede indicar esto con `SOURCE: cross-join`.
 
 ```python
 import sys, pathlib, pandas as pd
 sys.path.insert(0, str(pathlib.Path.home() / 'projects/kavak_connector'))
 from kavak_connector import query_databricks, query_redshift
 
-# Query 1: fuente Databricks
 df_db = query_databricks("""
-    SELECT dealer_id, nombre, region
-    FROM prd_refined.commercial.dealers
+    SELECT columna_clave, col1, col2
+    FROM prd_refined.schema.tabla_databricks
 """)
 
-# Query 2: fuente Redshift (dato aún no migrado)
 df_rs = query_redshift("""
-    SELECT dealer_id, total_ventas
-    FROM sales.dealer_summary
-    WHERE fecha >= '2026-01-01'
+    SELECT columna_clave, col3
+    FROM schema.tabla_redshift
 """)
 
-# Join en Python — resultado temporal mientras dure la migración
-df_result = pd.merge(df_db, df_rs, on="dealer_id", how="left")
+# Join en Python usando la columna clave común
+df_result = pd.merge(df_db, df_rs, on="columna_clave", how="left")
 print(df_result.to_string())
 ```
 
-Avisa al usuario: _"Resultado combinado de Databricks + Redshift. Este join es temporal — cuando la tabla migre completamente a Databricks, este paso ya no será necesario."_
+Avisa siempre: _"Join temporal Databricks + Redshift. Cuando la tabla migre a Databricks este paso desaparecerá."_
+
+---
+
+## Para uso desde analyst-agent u otros subagentes
+
+Cuando este skill es invocado por un agente, el agente debe indicar la fuente en su contexto:
+
+```
+SOURCE: databricks   → ejecutar en Databricks, no detectar sintaxis
+SOURCE: redshift     → ejecutar en Redshift, no detectar sintaxis
+SOURCE: cross-join   → patrón de join sección Cross-source
+SOURCE: unknown      → aplicar detección por sintaxis
+```
+
+El resultado se devuelve como `pandas.DataFrame` en `df`. El agente que llama puede asumir que:
+- Si no hay excepción → `df` contiene el resultado
+- Si hay `AUTH_ERROR_*` → el agente debe pausar y avisar al usuario
+- Si hay `QUERY_ERROR` → el agente debe reportar el error y no reintentar automáticamente
+- Si hay `CONFIG_ERROR` → el agente debe invocar `kavak-install`
 
 ---
 
@@ -113,34 +135,30 @@ Avisa al usuario: _"Resultado combinado de Databricks + Redshift. Este join es t
 
 ### `AUTH_ERROR_DATABRICKS`
 
-Verifica el método de auth activo:
 ```python
 import sys, pathlib
 sys.path.insert(0, str(pathlib.Path.home() / 'projects/kavak_connector'))
 from kavak_connector.databricks.auth import get_auth_method
 print(get_auth_method())
 ```
-- `token` → usa skill **`kavak-token-update`** para renovar el token
-- `oauth` → pide al usuario ejecutar:
-  ```bash
-  cd ~/projects/kavak_connector && python3 setup_auth.py
-  ```
+- `token` → skill **`kavak-token-update`**
+- `oauth` → pide ejecutar: `cd ~/projects/kavak_connector && python3 setup_auth.py`
 
 ### `AUTH_ERROR_REDSHIFT`
 
-Las credenciales de Redshift son permanentes. Si hay error de auth, verifica `~/.kavak_connector/redshift.env`. Si cambiaron, ejecuta la sección Redshift de `kavak-install`.
+Credenciales permanentes. Verifica `~/.kavak_connector/redshift.env`. Si cambiaron → sección Redshift de `kavak-install`.
 
-### `QUERY_ERROR: TABLE_NOT_FOUND` en Databricks
+### `QUERY_ERROR: TABLE_OR_VIEW_NOT_FOUND` en Databricks
 
-Confirma con el usuario si el dato podría estar en Redshift (migración pendiente). Si sí → intenta el mismo query en Redshift con formato `schema.tabla`.
+No intentes reescribir el query para Redshift. Informa: _"La tabla no existe en Databricks. ¿Está en Redshift? Si es así, proporciona el query con sintaxis `schema.tabla` y lo ejecutaré en Redshift."_
 
 ### `QUERY_ERROR: PERMISSION_DENIED`
 
-Informa al usuario que no tiene acceso a esa tabla y que debe solicitarlo al equipo de datos.
+Informa que se necesita acceso — contactar al equipo de datos.
 
 ### `QUERY_ERROR: SYNTAX_ERROR`
 
-Lee el mensaje de error, identifica el token problemático y ofrece la query corregida.
+Lee el mensaje, identifica el token problemático, ofrece la query corregida manteniendo la fuente original.
 
 ### `CONFIG_ERROR`
 
