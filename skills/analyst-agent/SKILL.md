@@ -35,6 +35,7 @@ triggers:
 ## Índice de Ejecución (seguir en orden)
 
 ```
+PASO 0 → Leer memoria del usuario  →  aplicar preferencias y contexto previo
 PASO 1 → Leer frontmatter de todos los dominios  →  construir scope index
 PASO 2 → ¿La solicitud coincide con algún topic?
           SÍ → PASO 3
@@ -47,7 +48,41 @@ PASO 5 → Verificar caché  →  ¿datos frescos disponibles?
 PASO 6 → Leer el .sql de references/  →  ejecutar con kavak-query + SOURCE correcto  →  guardar caché
 PASO 7 → Post-procesamiento si aplica (EaaS: dedup + clasificación)
 PASO 8 → Presentar resultado con diseño light
+PASO 9 → Guardar aprendizajes en memoria del usuario
 ```
+
+---
+
+## PASO 0 — Leer memoria del usuario
+
+**Directorio de memoria:** `~/.kavak_connector/agent_memory/`
+
+```bash
+ls ~/.kavak_connector/agent_memory/ 2>/dev/null && \
+  for f in ~/.kavak_connector/agent_memory/*.md; do
+    [ -f "$f" ] || continue
+    echo "=== $(basename $f) ==="
+    cat "$f"
+    echo
+  done
+```
+
+Si el directorio no existe o está vacío, continuar normalmente — es la primera interacción.
+
+**Archivos de memoria:**
+
+| Archivo | Contenido |
+|---|---|
+| `preferences.md` | Filtros habituales, rangos de fecha preferidos, granularidad, formato de respuesta |
+| `corrections.md` | Correcciones que el usuario hizo a respuestas anteriores |
+| `context.md` | Notas de negocio que el usuario ha compartido (dealers especiales, períodos relevantes, excepciones) |
+| `frequent_queries.md` | Queries o KPIs que el usuario pide con frecuencia (con sus parámetros típicos) |
+
+**Cómo usar la memoria al responder:**
+- Si `preferences.md` indica rango de fecha habitual → usarlo como default si el usuario no especificó fechas
+- Si `corrections.md` indica que cierto filtro estuvo mal → aplicar la corrección automáticamente
+- Si `context.md` tiene notas de dealers o categorías → aplicarlas sin que el usuario tenga que repetirlas
+- Si `frequent_queries.md` tiene la query actual → sugerir los parámetros que usó la última vez
 
 ---
 
@@ -232,11 +267,88 @@ Antes de entregar resultados de reservas / STR / entregas, comparar contra los v
 - Aplicar PIX thresholds cuando corresponda: ≤103% verde · 103–108% ámbar · >108% rojo · siempre 2 decimales
 - Siempre declarar suposiciones y fuente de datos:
   > **Suposiciones:** [fechas asumidas, filtros aplicados, granularidad, dedup aplicado, etc.]
-  > **Fuente de datos:** [CACHE del HH:MM hora MX | Query en tiempo real — HH:MM hora MX]
+  > **Fuente de datos:** [📦 Caché del HH:MM hora MX | 🔄 Query en tiempo real — HH:MM hora MX]
 - Si se usó Redshift como fallback en dominio `mixed`:
   > ⚠️ KPI consultado en Redshift — aún no tiene equivalente en Databricks.
 - Si se hizo cross-source join:
   > 📊 Join temporal Databricks + Redshift — válido durante la migración.
+
+---
+
+## PASO 9 — Guardar aprendizajes en memoria del usuario
+
+**Directorio:** `~/.kavak_connector/agent_memory/`
+
+```python
+from pathlib import Path
+
+MEMORY_DIR = Path.home() / ".kavak_connector" / "agent_memory"
+MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+```
+
+Después de cada respuesta exitosa, evaluar qué vale la pena guardar. La regla: **solo guardar lo que el usuario NO debería tener que repetir en una próxima sesión.**
+
+### Qué guardar y en qué archivo
+
+| Situación | Archivo | Qué escribir |
+|---|---|---|
+| El usuario especificó un rango de fechas sin que se lo pidieras | `preferences.md` | Rango habitual inferido + fecha de la observación |
+| El usuario corrigió un filtro, número o definición | `corrections.md` | La corrección exacta + contexto |
+| El usuario mencionó un dealer, agencia o excepción de negocio | `context.md` | Nota de negocio con fecha |
+| El usuario pidió el mismo KPI con los mismos parámetros que otra vez | `frequent_queries.md` | KPI + dominio + parámetros típicos |
+| El usuario prefirió un formato de respuesta (tabla HTML, CSV, resumen) | `preferences.md` | Preferencia de formato |
+
+### Formato de cada nota en los archivos
+
+```markdown
+## [YYYY-MM-DD HH:MM MX] — [título corto de la observación]
+[Descripción concisa de lo aprendido]
+```
+
+### Ejemplo de `preferences.md`
+
+```markdown
+## [2026-05-08 14:30 MX] — Rango de fechas habitual
+El usuario generalmente consulta el mes en curso (ej. mayo 2026). Si no especifica fechas, usar el mes calendario actual como default.
+
+## [2026-05-08 14:45 MX] — Formato preferido
+Prefiere tablas HTML con color para PIX. No necesita el desglose por dealer a menos que lo pida explícitamente.
+```
+
+### Ejemplo de `corrections.md`
+
+```markdown
+## [2026-05-08 15:00 MX] — Corrección: STR no incluye devueltos
+El usuario indicó que las devoluciones del CSV returns_override.csv deben restarse de entregas brutas antes de calcular STR neto. Aplicar siempre.
+```
+
+### Cuándo NO guardar
+
+- Respuestas negativas (fuera de scope) — no hay nada que aprender del contenido
+- Datos numéricos de resultados — eso es el caché, no la memoria
+- Información que ya está en los SKILL.md de los dominios
+
+### Actualizar vs. agregar
+
+Si el archivo ya tiene una nota sobre el mismo tema, **reemplaza la nota antigua** con la nueva (más reciente). No acumules duplicados.
+
+---
+
+## Forzar actualización del caché
+
+Si el usuario pide **datos actualizados**, **forzar refresh** o dice que el caché está desactualizado:
+
+```python
+# Eliminar el archivo de caché para forzar re-ejecución
+if cache_file.exists():
+    cache_file.unlink()
+    print(f"[CACHE CLEARED] {cache_file.name}")
+```
+
+Luego continuar desde el PASO 6 (ejecutar query y guardar nuevo caché).
+
+Frases que activan refresh forzado:
+- "actualiza los datos", "fuerza la query", "ignora el caché", "datos del día", "refresca"
 
 ---
 
@@ -266,24 +378,6 @@ Antes de entregar resultados de reservas / STR / entregas, comparar contra los v
 
 ---
 
-## Forzar actualización del caché
-
-Si el usuario pide **datos actualizados**, **forzar refresh** o dice que el caché está desactualizado:
-
-```python
-# Eliminar el archivo de caché para forzar re-ejecución
-if cache_file.exists():
-    cache_file.unlink()
-    print(f"[CACHE CLEARED] {cache_file.name}")
-```
-
-Luego continuar desde el PASO 6 (ejecutar query y guardar nuevo caché).
-
-Frases que activan refresh forzado:
-- "actualiza los datos", "fuerza la query", "ignora el caché", "datos del día", "refresca"
-
----
-
 ## Manejo de errores en contexto agéntico
 
 | Error de kavak-query | Acción |
@@ -295,3 +389,4 @@ Frases que activan refresh forzado:
 | `QUERY_ERROR: SYNTAX_ERROR` | Reporta el mensaje exacto — no reintenta automáticamente. |
 | `CONFIG_ERROR` | Avisa que el conector no está configurado → invoca `kavak-install`. |
 | Error al leer CSV de caché | Eliminar archivo corrupto y ejecutar query normalmente (PASO 6). |
+| Error al escribir en `agent_memory/` | Avisar brevemente al usuario — no interrumpir la respuesta principal. |
