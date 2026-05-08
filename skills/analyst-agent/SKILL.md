@@ -41,9 +41,12 @@ PASO 2 → ¿La solicitud coincide con algún topic?
           NO → Ir a sección FUERA DE SCOPE
 PASO 3 → Leer SKILL.md completo del dominio matched
 PASO 4 → Seguir routing interno del SKILL.md  →  identificar .sql + fuente
-PASO 5 → Leer el .sql de references/  →  ejecutar con kavak-query + SOURCE correcto
-PASO 6 → Post-procesamiento si aplica (EaaS: dedup + clasificación)
-PASO 7 → Presentar resultado con diseño light
+PASO 5 → Verificar caché  →  ¿datos frescos disponibles?
+          SÍ (frescos) → PASO 7
+          NO (ausentes o vencidos) → PASO 6
+PASO 6 → Leer el .sql de references/  →  ejecutar con kavak-query + SOURCE correcto  →  guardar caché
+PASO 7 → Post-procesamiento si aplica (EaaS: dedup + clasificación)
+PASO 8 → Presentar resultado con diseño light
 ```
 
 ---
@@ -112,7 +115,53 @@ La sección **"Routing rápido"** dentro del SKILL.md es tu guía de navegación
 
 ---
 
-## PASO 5 — Leer el .sql y ejecutar con kavak-query
+## PASO 5 — Verificar caché
+
+**Directorio de caché:** `~/.kavak_connector/cache/`  
+**Nombre del archivo:** `<dominio>__<nombre-del-sql-sin-extension>.csv`  
+Ejemplo: `kavak-marketplace-eaas-databricks__query-booking-funnel-eaas-databricks.csv`
+
+```python
+import pandas as pd
+from pathlib import Path
+from datetime import datetime
+import pytz
+
+CACHE_DIR = Path.home() / ".kavak_connector" / "cache"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+MX_TZ = pytz.timezone("America/Mexico_City")
+now_mx = datetime.now(MX_TZ)
+cutoff_today = now_mx.replace(hour=11, minute=0, second=0, microsecond=0)
+
+# Construir nombre del archivo de caché
+domain = "<nombre-dominio>"           # ej: kavak-marketplace-eaas-databricks
+sql_name = "<nombre-sql-sin-.sql>"    # ej: query-booking-funnel-eaas-databricks
+cache_file = CACHE_DIR / f"{domain}__{sql_name}.csv"
+
+# Verificar si el caché existe y es fresco
+cache_is_fresh = False
+cache_info = ""
+if cache_file.exists():
+    mtime = datetime.fromtimestamp(cache_file.stat().st_mtime, tz=MX_TZ)
+    if mtime >= cutoff_today:
+        cache_is_fresh = True
+        cache_info = f"Caché del {mtime.strftime('%Y-%m-%d %H:%M')} hora MX"
+
+if cache_is_fresh:
+    df = pd.read_csv(cache_file)
+    print(f"[CACHE HIT] {cache_info} — {len(df)} filas")
+else:
+    reason = "archivo no existe" if not cache_file.exists() else f"última actualización antes de las 11am MX (era {mtime.strftime('%H:%M')})"
+    print(f"[CACHE MISS] {reason} — ejecutando query...")
+```
+
+- **CACHE HIT** → saltar directamente al PASO 7 usando `df` del CSV
+- **CACHE MISS** → continuar al PASO 6
+
+---
+
+## PASO 6 — Leer el .sql y ejecutar con kavak-query + guardar caché
 
 ```bash
 cat ~/projects/kavak-databricks-plugin/knowledge/<dominio>/references/<archivo>.sql
@@ -127,11 +176,20 @@ SOURCE: redshift      →  si el KPI es ⚠️ SOLO REDSHIFT, o dominio Kuna
 SOURCE: cross-join    →  si se necesitan datos de ambas fuentes
 ```
 
+Después de obtener el resultado, **guardar inmediatamente en caché**:
+
+```python
+# Guardar resultado en caché (sobreescribe el anterior)
+df.to_csv(cache_file, index=False)
+saved_at = datetime.now(MX_TZ).strftime('%Y-%m-%d %H:%M')
+print(f"[CACHE SAVED] {cache_file.name} — {len(df)} filas — {saved_at} hora MX")
+```
+
 ---
 
-## PASO 6 — Post-procesamiento EaaS (solo para dominio EaaS, solo cuando aplica)
+## PASO 7 — Post-procesamiento EaaS (solo para dominio EaaS, solo cuando aplica)
 
-### 6a — Dedup de bookings (OBLIGATORIO antes de agregar reservas / entregas / STR / cancelaciones)
+### 7a — Dedup de bookings (OBLIGATORIO antes de agregar reservas / entregas / STR / cancelaciones)
 
 ```python
 import pandas as pd
@@ -152,7 +210,7 @@ df['reserva_unica'] = (
 bkg_c = df.loc[df['reserva_unica'] == 1, 'Booking_Cancellation'].fillna(0).sum()
 ```
 
-### 6b — Clasificación EaaS (cuando el resultado necesita columna de categoría EaaS)
+### 7b — Clasificación EaaS (cuando el resultado necesita columna de categoría EaaS)
 
 ```bash
 cat ~/projects/kavak-databricks-plugin/knowledge/kavak-marketplace-eaas-databricks/CLASIFICACION_EAAS.md
@@ -162,18 +220,19 @@ cat ~/projects/kavak-databricks-plugin/knowledge/kavak-marketplace-eaas-databric
 - Si la fuente fue **Redshift** → usar sección "CTEs SQL Base" (original)
 - La función Python `assign_categoria` es idéntica en ambos casos
 
-### 6c — Números de referencia EaaS
+### 7c — Números de referencia EaaS
 
 Antes de entregar resultados de reservas / STR / entregas, comparar contra los valores validados del SKILL.md del dominio. Si hay divergencia significativa, revisar: dedup aplicado · `reserva_unica=1` en STR · vista EVENTO para entregas.
 
 ---
 
-## PASO 7 — Presentar resultado
+## PASO 8 — Presentar resultado
 
 - Usar sistema de diseño **light** (tabla HTML si aplica, no markdown tabla cuando sea para presentación)
 - Aplicar PIX thresholds cuando corresponda: ≤103% verde · 103–108% ámbar · >108% rojo · siempre 2 decimales
-- Siempre declarar suposiciones:
+- Siempre declarar suposiciones y fuente de datos:
   > **Suposiciones:** [fechas asumidas, filtros aplicados, granularidad, dedup aplicado, etc.]
+  > **Fuente de datos:** [CACHE del HH:MM hora MX | Query en tiempo real — HH:MM hora MX]
 - Si se usó Redshift como fallback en dominio `mixed`:
   > ⚠️ KPI consultado en Redshift — aún no tiene equivalente en Databricks.
 - Si se hizo cross-source join:
@@ -207,6 +266,24 @@ Antes de entregar resultados de reservas / STR / entregas, comparar contra los v
 
 ---
 
+## Forzar actualización del caché
+
+Si el usuario pide **datos actualizados**, **forzar refresh** o dice que el caché está desactualizado:
+
+```python
+# Eliminar el archivo de caché para forzar re-ejecución
+if cache_file.exists():
+    cache_file.unlink()
+    print(f"[CACHE CLEARED] {cache_file.name}")
+```
+
+Luego continuar desde el PASO 6 (ejecutar query y guardar nuevo caché).
+
+Frases que activan refresh forzado:
+- "actualiza los datos", "fuerza la query", "ignora el caché", "datos del día", "refresca"
+
+---
+
 ## Manejo de errores en contexto agéntico
 
 | Error de kavak-query | Acción |
@@ -217,3 +294,4 @@ Antes de entregar resultados de reservas / STR / entregas, comparar contra los v
 | `QUERY_ERROR: PERMISSION_DENIED` | Reporta al usuario — no reintenta. |
 | `QUERY_ERROR: SYNTAX_ERROR` | Reporta el mensaje exacto — no reintenta automáticamente. |
 | `CONFIG_ERROR` | Avisa que el conector no está configurado → invoca `kavak-install`. |
+| Error al leer CSV de caché | Eliminar archivo corrupto y ejecutar query normalmente (PASO 6). |
