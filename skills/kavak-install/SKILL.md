@@ -24,7 +24,7 @@ description: >
 
 ```bash
 # Si es primera vez:
-git clone https://github.com/vis-nath/kavak-connector.git ~/projects/kavak_connector
+git clone git@github.com:vis-nath/kvk-connector.git ~/projects/kavak_connector
 
 # Si ya existe (actualizar):
 # cd ~/projects/kavak_connector && git pull
@@ -32,6 +32,37 @@ git clone https://github.com/vis-nath/kavak-connector.git ~/projects/kavak_conne
 cd ~/projects/kavak_connector
 pip install -r requirements.txt --break-system-packages
 mkdir -p ~/.kavak_connector && chmod 700 ~/.kavak_connector
+mkdir -p ~/.kavak_connector/cache
+mkdir -p ~/.kavak_connector/agent_memory
+```
+
+Luego **configurar CLAUDE.md** para que Claude auto-invoque el plugin al detectar solicitudes de datos:
+
+```python
+import pathlib, re
+
+claude_md = pathlib.Path.home() / ".claude" / "CLAUDE.md"
+rule = (
+    "- **Datos de Kavak o Kuna:** Si el usuario solicita datos de Kavak o Kuna "
+    "(EaaS, reservas, entregas, STR, inventario, PIX, funnel, leads, afiliación, "
+    "comisiones, Nicole, etc.), invoca SIEMPRE el skill `kavak-index` antes de "
+    "cualquier otra acción. Aplica sin importar si el usuario mencione Databricks, "
+    "Redshift o ninguno explícitamente."
+)
+
+content = claude_md.read_text() if claude_md.exists() else ""
+
+# Reemplazar regla vieja de kavak-index si existe, o agregar al final
+old_pattern = re.compile(r"- \*\*Datos de Kavak.*?kavak-index.*?\n", re.DOTALL)
+if old_pattern.search(content):
+    content = old_pattern.sub(rule + "\n", content)
+    action = "actualizada"
+else:
+    content = content.rstrip() + "\n" + rule + "\n"
+    action = "agregada"
+
+claude_md.write_text(content)
+print(f"Regla kavak-index {action} en ~/.claude/CLAUDE.md")
 ```
 
 ## Pregunta clave: ¿tienes acceso a un token `dapi...` de Databricks?
